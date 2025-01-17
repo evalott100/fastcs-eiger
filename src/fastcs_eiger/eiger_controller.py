@@ -1,4 +1,5 @@
 import asyncio
+import enum
 from collections.abc import Coroutine
 from dataclasses import dataclass
 from io import BytesIO
@@ -7,7 +8,7 @@ from typing import Any, Literal
 import numpy as np
 from fastcs.attributes import Attribute, AttrR, AttrRW, AttrW, Handler
 from fastcs.controller import BaseController, Controller, SubController
-from fastcs.datatypes import Bool, Float, Int, String
+from fastcs.datatypes import Bool, Enum, Float, Int, String
 from fastcs.wrappers import command, scan
 from PIL import Image
 
@@ -94,7 +95,7 @@ class EigerHandler:
                 isinstance(s, str) for s in value
             ):  # error is a list of strings
                 value = ", ".join(value)
-            await attr.set(value)
+            await attr.set(attr.dtype(value))
         except Exception as e:
             print(f"Failed to get {self.uri}:\n{e.__class__.__name__} {e}")
 
@@ -321,11 +322,26 @@ class EigerSubsystemController(SubController):
                 case "float":
                     datatype = Float()
                 case "int" | "uint":
-                    datatype = Int()
+                    if allowed_values := parameter.response.get("allowed_values"):
+                        datatype = Enum(
+                            enum.IntEnum(parameter.attribute_name, allowed_values)
+                        )
+                    else:
+                        datatype = Int()
+
                 case "bool":
                     datatype = Bool()
                 case "string" | "datetime" | "State" | "string[]":
-                    datatype = String()
+                    if allowed_values := parameter.response.get("allowed_values"):
+                        datatype = Enum(
+                            enum.StrEnum(
+                                parameter.attribute_name,
+                                {value: value for value in allowed_values},
+                            )
+                        )
+                    else:
+                        datatype = String()
+
                 case _:
                     print(f"Failed to handle {parameter}")
                     continue
@@ -343,7 +359,6 @@ class EigerSubsystemController(SubController):
                         datatype,  # type: ignore
                         handler=EIGER_HANDLERS[parameter.mode](parameter.uri),
                         group=group,
-                        allowed_values=parameter.response.get("allowed_values", None),
                     )
 
         return attributes

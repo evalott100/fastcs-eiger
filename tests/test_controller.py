@@ -40,6 +40,8 @@ async def test_eiger_handler_update_updates_value(mocker: MockerFixture):
     updater = EigerHandler(dummy_uri)
     controller = mocker.AsyncMock()
     attr = mocker.Mock()
+    attr.set = mocker.AsyncMock()
+    attr.dtype = int
 
     controller.connection.get.return_value = {"value": 5}
 
